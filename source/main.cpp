@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
+#include <sstream>
 #include <chrono>
 
 // Notes
@@ -143,7 +144,7 @@ int main()
         return 0;
     }
 
-    // TODO: Check presentation support?
+    // TODO: Check presentation support? Or maybe use 2 queues, one for graphics and one for presentation
 
     ///////////////////////////////////////////////////////////////////////////
     ///
@@ -312,7 +313,7 @@ int main()
     swapchain_create_info.pQueueFamilyIndices = nullptr;
     swapchain_create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapchain_create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR; // TODO: Check if there is a better mode.
+    swapchain_create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR; // TODO: Check if there is a better mode?
     swapchain_create_info.clipped = VK_TRUE;
     swapchain_create_info.oldSwapchain = VK_NULL_HANDLE; // TODO: Support for resizing windows (recreate swapchain).
 
@@ -385,7 +386,7 @@ int main()
     /// Read shader binaries.
     ///
 
-    std::ifstream vertex_shader_file_stream("vert.spv", std::ios::binary | std::ios::ate);
+    std::ifstream vertex_shader_file_stream("shader.vert.spv", std::ios::binary | std::ios::ate);
 
     if (!vertex_shader_file_stream)
     {
@@ -402,7 +403,7 @@ int main()
     vertex_shader_file_stream.read(vertex_shader_file_buffer, vertex_shader_file_size);
     vertex_shader_file_stream.close();
 
-    std::ifstream fragment_shader_file_stream("frag.spv", std::ios::binary | std::ios::ate);
+    std::ifstream fragment_shader_file_stream("shader.frag.spv", std::ios::binary | std::ios::ate);
 
     if (!fragment_shader_file_stream)
     {
@@ -676,6 +677,10 @@ int main()
         return 1;
     }
 
+    // Not needed anymore because they are in the pipeline
+    vkDestroyShaderModule(device, vertex_shader_module, nullptr);
+    vkDestroyShaderModule(device, fragment_shader_module, nullptr);
+
     ///////////////////////////////////////////////////////////////////////////
     ///
     /// Create framebuffer.
@@ -783,7 +788,7 @@ int main()
 
     ///////////////////////////////////////////////////////////////////////////
     ///
-    /// Create semaphores for proper synchronization.
+    /// Create semaphores and fences for proper synchronization.
     ///
 
     VkSemaphoreCreateInfo semaphore_create_info;
@@ -806,15 +811,33 @@ int main()
         return 1;
     }
 
+    VkFenceCreateInfo fence_create_info;
+    fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fence_create_info.pNext = nullptr;
+    fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    VkFence *fences = new VkFence[swapchain_image_count];
+
+    for (unsigned int i = 0; i < swapchain_image_count; i++)
+    {
+        if (vkCreateFence(device, &fence_create_info, nullptr, &fences[i]) != VK_SUCCESS)
+        {
+            std::cerr << "Failed to create fence." << std::endl;
+            return 1;
+        }
+    }
+
     ///////////////////////////////////////////////////////////////////////////
     ///
     /// Main rendering and event loop.
     ///
 
+    unsigned long frames_per_second = 0;
+    auto last_frame_begin_time = std::chrono::steady_clock::now();
+
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
-
 
         // Draw frame:
         //   1.) Get image from swapchain
@@ -823,9 +846,23 @@ int main()
 
         // Get next framebuffer image
         unsigned int image_index = 0;
-        if (vkAcquireNextImageKHR(device, swapchain, 2000, semaphore_image_available, VK_NULL_HANDLE, &image_index) != VK_SUCCESS)
+        if (vkAcquireNextImageKHR(device, swapchain, std::numeric_limits<uint64_t>::max(), semaphore_image_available, VK_NULL_HANDLE, &image_index) != VK_SUCCESS)
         {
             std::cerr << "Failed to acquire next image.";
+            return 1;
+        }
+
+        // Wait fence
+        if (vkWaitForFences(device, 1, &fences[image_index], VK_TRUE, std::numeric_limits<uint64_t>::max()) != VK_SUCCESS)
+        {
+            std::cerr << "Failed to wait for fence." << std::endl;
+            return 1;
+        }
+
+        // Reset fence
+        if (vkResetFences(device, 1, &fences[image_index]) != VK_SUCCESS)
+        {
+            std::cerr << "Failed to wait for fence." << std::endl;
             return 1;
         }
 
@@ -844,7 +881,7 @@ int main()
         submit_info.signalSemaphoreCount = 1;
         submit_info.pSignalSemaphores = &semaphore_image_rendered;
 
-        if (vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE) != VK_SUCCESS)
+        if (vkQueueSubmit(queue, 1, &submit_info, fences[image_index]) != VK_SUCCESS)
         {
             std::cerr << "Failed submitting to queue." << std::endl;
             return 1;
@@ -866,8 +903,19 @@ int main()
             return 1;
         }
 
-        // TODO: Proper VSync (imitate 60fps)
-        std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(16.6666666666667));
+        frames_per_second++;
+
+        if (std::chrono::steady_clock::now() - last_frame_begin_time >= std::chrono::seconds(1))
+        {
+            std::stringstream title_stream;
+            title_stream << "learn-vulkan - fps: " << frames_per_second;
+            glfwSetWindowTitle(window, title_stream.str().c_str());
+            frames_per_second = 0;
+            last_frame_begin_time = std::chrono::steady_clock::now();
+        }
+
+        // TODO: Proper VSync
+        //std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(16.6666666666667));
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -879,6 +927,13 @@ int main()
     glfwTerminate();
 
     vkDeviceWaitIdle(device);
+
+    for (unsigned int i = 0; i < swapchain_image_count; i++)
+    {
+        vkDestroyFence(device, fences[i], nullptr);
+    }
+
+    delete[] fences;
 
     vkDestroySemaphore(device, semaphore_image_available, nullptr);
     vkDestroySemaphore(device, semaphore_image_rendered, nullptr);
@@ -909,9 +964,6 @@ int main()
     }
 
     delete[] image_views;
-
-    vkDestroyShaderModule(device, vertex_shader_module, nullptr);
-    vkDestroyShaderModule(device, fragment_shader_module, nullptr);
 
     vkDestroySwapchainKHR(device, swapchain, nullptr);
     vkDestroyDevice(device, nullptr);
