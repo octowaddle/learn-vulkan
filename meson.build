@@ -8,15 +8,15 @@ project('learn-vulkan', 'cpp', default_options: ['cpp_std=c++17'])
 glsl_compiler = find_program('glslc', required : true)
 
 vertex_shader = custom_target('vertex-shader',
-  output : 'shader.vert.spv',
-  input : 'source/shader.vert.glsl',
+  output : 'vert.spv',
+  input : 'source/shaders/vert.glsl',
   command : [glsl_compiler, '-fshader-stage=vert', '-o', '@OUTPUT@','@INPUT@'],
   build_always : true
 )
 
 fragment_shader = custom_target('fragment-shader',
-  output : 'shader.frag.spv',
-  input : 'source/shader.frag.glsl',
+  output : 'frag.spv',
+  input : 'source/shaders/frag.glsl',
   command : [glsl_compiler, '-fshader-stage=frag', '-o', '@OUTPUT@','@INPUT@'],
   build_always : true
 )
