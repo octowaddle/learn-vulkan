@@ -1,51 +1,14 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#include <iostream>
+#include <vector>
 #include <fstream>
-#include <thread>
-#include <sstream>
-#include <chrono>
+#include <iostream>
+#include <limits>
 
-// Notes
-//
-// -? Use std::vector<T> instead of heap-allocated C++ arrays.
-//
-// Shall be classes:
-//
-// - Instance
-// - Device
-// - Pipeline (with PipelineLayout)
-// - Images
-// - RenderPass
-// - QueueFamily (for index)
-// - Shader modules
-// - SwapChain (for image count)
-// - CommandPool
-// - Queue
-//
-
-int main()
+// Part of `Instance`
+VkInstance create_instance()
 {
-    const unsigned int width = 600;
-    const unsigned int height = 500;
-
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Initialization
-    ///
-
-    if (!glfwInit())
-    {
-        std::cerr << "Failed to initialize GLFW." << std::endl;
-        return 1;
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Create a Vulkan instance.
-    ///
-
-    unsigned int layer_count = 0;
+    unsigned int layer_count = 1;
     const char *layer_names[] = {"VK_LAYER_KHRONOS_validation"};
 
     unsigned int extension_count = 0;
@@ -76,25 +39,26 @@ int main()
     if (vkCreateInstance(&instance_create_info, nullptr, &instance) != VK_SUCCESS)
     {
         std::cerr << "Failed to create instance." << std::endl;
-        return 1;
+        throw 1;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Choose a physical device.
-    ///
+    return instance;
+}
 
+// Part of `PhysicalDevice`
+VkPhysicalDevice choose_physical_device(VkInstance &instance)
+{
     unsigned int physical_device_count = 0;
     if (vkEnumeratePhysicalDevices(instance, &physical_device_count, nullptr) != VK_SUCCESS)
     {
         std::cerr << "Failed to find physical device count." << std::endl;
-        return 1;
+        throw 1;
     }
 
     if (physical_device_count == 0)
     {
         std::cerr << "No physical device is available." << std::endl;
-        return 1;
+        throw 1;
     }
 
     VkPhysicalDevice *physical_devices = new VkPhysicalDevice[physical_device_count];
@@ -102,18 +66,17 @@ int main()
     if (vkEnumeratePhysicalDevices(instance, &physical_device_count, physical_devices) != VK_SUCCESS)
     {
         std::cerr << "Failed to find physical devices." << std::endl;
-        return 1;
+        throw 1;
     }
 
     // TODO: Choose a physical device properly instead of choosing the first.
     VkPhysicalDevice physical_device = physical_devices[0];
     delete[] physical_devices;
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Choose a queue family.
-    ///
-
+    return physical_device;
+}
+unsigned int select_queue_family_index(VkPhysicalDevice &physical_device)
+{
     unsigned int queue_family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, nullptr);
     if (queue_family_count == 0)
@@ -141,16 +104,17 @@ int main()
     if (queue_family_index < 0)
     {
         std::cerr << "No suitable queue family found." << std::endl;
-        return 0;
+        throw 0;
     }
 
     // TODO: Check presentation support? Or maybe use 2 queues, one for graphics and one for presentation
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Create a logical device.
-    ///
+    return queue_family_index;
+}
 
+// Part of `Device`
+VkDevice create_device(VkPhysicalDevice &physical_device, unsigned int queue_family_index)
+{
     float queue_priorities[] = {1.0f};
 
     VkDeviceQueueCreateInfo device_queue_create_info;
@@ -180,58 +144,38 @@ int main()
     if (vkCreateDevice(physical_device, &device_create_info, nullptr, &device) != VK_SUCCESS)
     {
         std::cerr << "Failed to create device." << std::endl;
-        return 1;
+        throw 1;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Create queue.
-    ///
+    return device;
+}
 
-    VkQueue queue;
-    vkGetDeviceQueue(device, queue_family_index, 0, &queue);
-
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Create a GLFW window.
-    ///
-
-    glfwDefaultWindowHints();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
-    GLFWwindow *window = glfwCreateWindow(width, height, "learn-vulkan", nullptr, nullptr);
-
-    if (!window)
-    {
-        std::cerr << "Failed to create window." << std::endl;
-        return 1;
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Create a window surface.
-    ///
-
+// Part of `Surface`
+VkSurfaceKHR create_surface(VkInstance &instance, GLFWwindow *window)
+{
     VkSurfaceKHR surface;
     if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
     {
         std::cerr << "Failed to create window surface." << std::endl;
-        return 1;
+        throw 1;
     }
 
+    return surface;
+}
+VkSurfaceFormatKHR get_surface_format(VkPhysicalDevice &physical_device, VkSurfaceKHR &surface)
+{
     unsigned int surface_format_count = 0;
 
     if (vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_format_count, nullptr) != VK_SUCCESS)
     {
         std::cerr << "Failed to find surface formats." << std::endl;
-        return 1;
+        throw 1;
     }
 
     if (surface_format_count == 0)
     {
         std::cerr << "No surface formats are found." << std::endl;
-        return 1;
+        throw 1;
     }
 
     VkSurfaceFormatKHR *surface_formats = new VkSurfaceFormatKHR[surface_format_count];
@@ -239,7 +183,7 @@ int main()
     if (vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_format_count, surface_formats) != VK_SUCCESS)
     {
         std::cerr << "Failed to fetch surface formats." << std::endl;
-        return 1;
+        throw 1;
     }
 
     VkSurfaceFormatKHR surface_format = {};
@@ -258,43 +202,48 @@ int main()
     if (surface_format.format == VK_FORMAT_UNDEFINED)
     {
         std::cerr << "Surface does not support R8G8B8A8 format." << std::endl;
-        return 1;
+        throw 1;
     }
 
+    return surface_format;
+}
+VkSurfaceCapabilitiesKHR get_surface_capabilities(VkPhysicalDevice &physical_device, VkSurfaceKHR &surface)
+{
     VkSurfaceCapabilitiesKHR surface_capabilities;
     if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities) != VK_SUCCESS)
     {
         std::cerr << "Failed to fetch surface capabilities." << std::endl;
-        return 1;
+        throw 1;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Create a swapchain.
-    ///
+    return surface_capabilities;
+}
 
+// Part of `SwapChain`
+VkSwapchainKHR create_swap_chain(VkPhysicalDevice &physical_device, VkDevice &device, unsigned int queue_family_index, VkSurfaceKHR &surface)
+{
     unsigned int min_image_count = 2;
 
-    if (surface_capabilities.maxImageCount >= 3)
+    if (get_surface_capabilities(physical_device, surface).maxImageCount >= 3)
     {
         min_image_count = 3;
     }
     else
     {
-        min_image_count = surface_capabilities.minImageCount;
+        min_image_count = get_surface_capabilities(physical_device, surface).minImageCount;
     }
 
     VkBool32 surface_supported = false;
     if (vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, queue_family_index, surface, &surface_supported) != VK_SUCCESS)
     {
         std::cerr << "Failed to check surface support of physical device." << std::endl;
-        return 1;
+        throw 1;
     }
 
     if (!surface_supported)
     {
         std::cerr << "Physical device does not support surfaces." << std::endl;
-        return 1;
+        throw 1;
     }
 
     VkSwapchainCreateInfoKHR swapchain_create_info;
@@ -303,9 +252,9 @@ int main()
     swapchain_create_info.flags = 0;
     swapchain_create_info.surface = surface;
     swapchain_create_info.minImageCount = min_image_count;
-    swapchain_create_info.imageFormat = surface_format.format;
+    swapchain_create_info.imageFormat = get_surface_format(physical_device, surface).format;
     swapchain_create_info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR; // TODO: Check if valid.
-    swapchain_create_info.imageExtent = surface_capabilities.currentExtent;
+    swapchain_create_info.imageExtent = get_surface_capabilities(physical_device, surface).currentExtent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE; // TODO: Support for separate presentation and graphic queues (VK_SHARING_MODE_CONCURRENT).
@@ -321,32 +270,32 @@ int main()
     if (vkCreateSwapchainKHR(device, &swapchain_create_info, nullptr, &swapchain) != VK_SUCCESS)
     {
         std::cerr << "Failed to create swapchain." << std::endl;
-        return 1;
+        throw 1;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Swapchain image views.
-    ///
-
+    return swapchain;
+}
+std::vector<VkImageView> create_image_views(VkDevice device, VkSwapchainKHR swapchain, VkSurfaceFormatKHR surface_format)
+{
     unsigned int swapchain_image_count = 0;
+
     if (vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, nullptr) != VK_SUCCESS)
     {
         std::cerr << "Failed to fetch swapchain images." << std::endl;
-        return 1;
+        throw 1;
     }
 
     if (swapchain_image_count == 0)
     {
         std::cerr << "No swapchain images found." << std::endl;
-        return 1;
+        throw 1;
     }
 
     VkImage *swapchain_images = new VkImage[swapchain_image_count];
     if (vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, swapchain_images) != VK_SUCCESS)
     {
         std::cerr << "Failed to fetch swapchain images." << std::endl;
-        return 1;
+        throw 1;
     }
 
     VkImageViewCreateInfo image_view_create_info;
@@ -367,7 +316,7 @@ int main()
     image_view_create_info.subresourceRange.layerCount = 1;
 
     // Need Vulkan clean up, afterwards delete array (at end).
-    VkImageView *image_views = new VkImageView[swapchain_image_count];
+    std::vector<VkImageView> image_views(swapchain_image_count);
     for (unsigned int i = 0; i < swapchain_image_count; i++)
     {
         image_view_create_info.image = swapchain_images[i];
@@ -375,23 +324,24 @@ int main()
         if (vkCreateImageView(device, &image_view_create_info, nullptr, &image_views[i]) != VK_SUCCESS)
         {
             std::cerr << "Failed to create image view." << std::endl;
-            return 1;
+            throw 1;
         }
     }
 
     delete[] swapchain_images;
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Read shader binaries.
-    ///
+    return image_views;
+}
 
+// Part of `Shader`
+VkShaderModule create_vertex_shader_module(VkDevice device)
+{
     std::ifstream vertex_shader_file_stream("vert.spv", std::ios::binary | std::ios::ate);
 
     if (!vertex_shader_file_stream)
     {
         std::cerr << "Failed to load vertex shader file." << std::endl;
-        return 1;
+        throw 1;
     }
 
     // Put the read head to the end of the file and check the pointer to find
@@ -402,28 +352,6 @@ int main()
     vertex_shader_file_stream.seekg(0);
     vertex_shader_file_stream.read(vertex_shader_file_buffer, vertex_shader_file_size);
     vertex_shader_file_stream.close();
-
-    std::ifstream fragment_shader_file_stream("frag.spv", std::ios::binary | std::ios::ate);
-
-    if (!fragment_shader_file_stream)
-    {
-        std::cerr << "Failed to load fragment shader file." << std::endl;
-        return 1;
-    }
-
-    // Put the read head to the end of the file and check the pointer to find
-    // out the file size.
-    size_t fragment_shader_file_size = fragment_shader_file_stream.tellg();
-    char *fragment_shader_file_buffer = new char[fragment_shader_file_size];
-    // Move the read head back to the beginning so it can be read properly.
-    fragment_shader_file_stream.seekg(0);
-    fragment_shader_file_stream.read(fragment_shader_file_buffer, fragment_shader_file_size);
-    fragment_shader_file_stream.close();
-
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Shader modules creation.
-    ///
 
     VkShaderModuleCreateInfo shader_module_create_info;
     shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -436,11 +364,36 @@ int main()
     if (vkCreateShaderModule(device, &shader_module_create_info, nullptr, &vertex_shader_module) != VK_SUCCESS)
     {
         std::cerr << "Failed to create vertex shader module." << std::endl;
-        return 1;
+        throw 1;
     }
 
     delete[] vertex_shader_file_buffer;
 
+    return vertex_shader_module;
+}
+VkShaderModule create_fragment_shader_module(VkDevice device)
+{
+    std::ifstream fragment_shader_file_stream("frag.spv", std::ios::binary | std::ios::ate);
+
+    if (!fragment_shader_file_stream)
+    {
+        std::cerr << "Failed to load fragment shader file." << std::endl;
+        throw 1;
+    }
+
+    // Put the read head to the end of the file and check the pointer to find
+    // out the file size.
+    size_t fragment_shader_file_size = fragment_shader_file_stream.tellg();
+    char *fragment_shader_file_buffer = new char[fragment_shader_file_size];
+    // Move the read head back to the beginning so it can be read properly.
+    fragment_shader_file_stream.seekg(0);
+    fragment_shader_file_stream.read(fragment_shader_file_buffer, fragment_shader_file_size);
+    fragment_shader_file_stream.close();
+
+    VkShaderModuleCreateInfo shader_module_create_info;
+    shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shader_module_create_info.pNext = nullptr;
+    shader_module_create_info.flags = 0;
     shader_module_create_info.codeSize = fragment_shader_file_size;
     shader_module_create_info.pCode = reinterpret_cast<uint32_t *>(fragment_shader_file_buffer);
 
@@ -448,59 +401,17 @@ int main()
     if (vkCreateShaderModule(device, &shader_module_create_info, nullptr, &fragment_shader_module) != VK_SUCCESS)
     {
         std::cerr << "Failed to create fragment shader module." << std::endl;
-        return 1;
+        throw 1;
     }
 
     delete[] fragment_shader_file_buffer;
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Create pipeline shader stages.
-    ///
+    return fragment_shader_module;
+}
 
-    VkPipelineShaderStageCreateInfo pipeline_vertex_shader_stage_create_info;
-    pipeline_vertex_shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    pipeline_vertex_shader_stage_create_info.pNext = nullptr;
-    pipeline_vertex_shader_stage_create_info.flags = 0;
-    pipeline_vertex_shader_stage_create_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    pipeline_vertex_shader_stage_create_info.module = vertex_shader_module;
-    pipeline_vertex_shader_stage_create_info.pName = "main";
-    pipeline_vertex_shader_stage_create_info.pSpecializationInfo = nullptr;
-
-    VkPipelineShaderStageCreateInfo pipeline_fragment_shader_stage_create_info;
-    pipeline_fragment_shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    pipeline_fragment_shader_stage_create_info.pNext = nullptr;
-    pipeline_fragment_shader_stage_create_info.flags = 0;
-    pipeline_fragment_shader_stage_create_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    pipeline_fragment_shader_stage_create_info.module = fragment_shader_module;
-    pipeline_fragment_shader_stage_create_info.pName = "main";
-    pipeline_fragment_shader_stage_create_info.pSpecializationInfo = nullptr;
-
-    VkPipelineShaderStageCreateInfo pipeline_shader_stage_create_infos[] = {
-        pipeline_vertex_shader_stage_create_info,
-        pipeline_fragment_shader_stage_create_info};
-
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Create render pass.
-    ///
-
-    VkPipelineLayoutCreateInfo pipeline_layout_create_info;
-    pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipeline_layout_create_info.pNext = nullptr;
-    pipeline_layout_create_info.flags = 0;
-    pipeline_layout_create_info.setLayoutCount = 0;
-    pipeline_layout_create_info.pSetLayouts = nullptr;
-    pipeline_layout_create_info.pushConstantRangeCount = 0;
-    pipeline_layout_create_info.pPushConstantRanges = nullptr;
-
-    VkPipelineLayout pipeline_layout;
-    if (vkCreatePipelineLayout(device, &pipeline_layout_create_info, nullptr, &pipeline_layout) != VK_SUCCESS)
-    {
-        std::cerr << "Failed to create pipeline layout." << std::endl;
-        return 1;
-    }
-
+// Part of `RenderPass`
+VkRenderPass create_render_pass(VkDevice &device, VkSurfaceFormatKHR surface_format)
+{
     VkAttachmentDescription attachment_description;
     attachment_description.flags = 0;
     attachment_description.format = surface_format.format;
@@ -552,13 +463,52 @@ int main()
     if (vkCreateRenderPass(device, &render_pass_create_info, nullptr, &render_pass) != VK_SUCCESS)
     {
         std::cerr << "Failed to create render pass.";
-        return 1;
+        throw 1;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Create pipeline.
-    ///
+    return render_pass;
+}
+
+// Part of `Pipeline`
+VkPipeline create_pipeline(VkDevice &device, VkSurfaceCapabilitiesKHR &surface_capabilities, VkShaderModule &vertex_shader_module, VkShaderModule &fragment_shader_module, VkRenderPass &render_pass)
+{
+    VkPipelineShaderStageCreateInfo pipeline_vertex_shader_stage_create_info;
+    pipeline_vertex_shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pipeline_vertex_shader_stage_create_info.pNext = nullptr;
+    pipeline_vertex_shader_stage_create_info.flags = 0;
+    pipeline_vertex_shader_stage_create_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    pipeline_vertex_shader_stage_create_info.module = vertex_shader_module;
+    pipeline_vertex_shader_stage_create_info.pName = "main";
+    pipeline_vertex_shader_stage_create_info.pSpecializationInfo = nullptr;
+
+    VkPipelineShaderStageCreateInfo pipeline_fragment_shader_stage_create_info;
+    pipeline_fragment_shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pipeline_fragment_shader_stage_create_info.pNext = nullptr;
+    pipeline_fragment_shader_stage_create_info.flags = 0;
+    pipeline_fragment_shader_stage_create_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    pipeline_fragment_shader_stage_create_info.module = fragment_shader_module;
+    pipeline_fragment_shader_stage_create_info.pName = "main";
+    pipeline_fragment_shader_stage_create_info.pSpecializationInfo = nullptr;
+
+    VkPipelineShaderStageCreateInfo pipeline_shader_stage_create_infos[] = {
+        pipeline_vertex_shader_stage_create_info,
+        pipeline_fragment_shader_stage_create_info};
+
+    VkPipelineLayoutCreateInfo pipeline_layout_create_info;
+    pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipeline_layout_create_info.pNext = nullptr;
+    pipeline_layout_create_info.flags = 0;
+    pipeline_layout_create_info.setLayoutCount = 0;
+    pipeline_layout_create_info.pSetLayouts = nullptr;
+    pipeline_layout_create_info.pushConstantRangeCount = 0;
+    pipeline_layout_create_info.pPushConstantRanges = nullptr;
+
+    VkPipelineLayout pipeline_layout;
+    if (vkCreatePipelineLayout(device, &pipeline_layout_create_info, nullptr, &pipeline_layout) != VK_SUCCESS)
+    {
+        std::cerr << "Failed to create pipeline layout." << std::endl;
+        throw 1;
+    }
 
     VkPipelineVertexInputStateCreateInfo pipeline_vertex_input_state_create_info;
     pipeline_vertex_input_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -674,19 +624,20 @@ int main()
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphics_pipeline_create_info, nullptr, &pipeline) != VK_SUCCESS)
     {
         std::cerr << "Failed to create pipeline." << std::endl;
-        return 1;
+        throw 1;
     }
 
     // Not needed anymore because they are in the pipeline
     vkDestroyShaderModule(device, vertex_shader_module, nullptr);
     vkDestroyShaderModule(device, fragment_shader_module, nullptr);
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Create framebuffer.
-    ///
+    return pipeline;
+}
 
-    VkFramebuffer *framebuffers = new VkFramebuffer[swapchain_image_count];
+// Part of `Framebuffer`
+std::vector<VkFramebuffer> create_framebuffers(VkDevice &device, unsigned int swapchain_image_count, VkRenderPass &render_pass, std::vector<VkImageView> &image_views, VkSurfaceCapabilitiesKHR &surface_capabilities)
+{
+    std::vector<VkFramebuffer> framebuffers(swapchain_image_count);
 
     for (unsigned int i = 0; i < swapchain_image_count; i++)
     {
@@ -705,15 +656,14 @@ int main()
         if (vkCreateFramebuffer(device, &framebuffer_create_info, nullptr, &framebuffers[i]) != VK_SUCCESS)
         {
             std::cerr << "Failed to create framebuffer." << std::endl;
-            return 1;
+            throw 1;
         }
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Set up command buffers.
-    ///
-
+    return framebuffers;
+}
+std::vector<VkCommandBuffer> create_command_buffers(unsigned int queue_family_index, VkDevice &device, unsigned int swapchain_image_count, std::vector<VkFramebuffer> &framebuffers, VkRenderPass &render_pass, VkPipeline &pipeline, VkSurfaceCapabilitiesKHR &surface_capabilities)
+{
     VkCommandPoolCreateInfo command_pool_create_info;
     command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     command_pool_create_info.pNext = nullptr;
@@ -724,7 +674,7 @@ int main()
     if (vkCreateCommandPool(device, &command_pool_create_info, nullptr, &command_pool) != VK_SUCCESS)
     {
         std::cerr << "Failed to create command pool." << std::endl;
-        return 1;
+        throw 1;
     }
 
     VkCommandBufferAllocateInfo command_buffer_allocate_info;
@@ -734,12 +684,12 @@ int main()
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     command_buffer_allocate_info.commandBufferCount = swapchain_image_count; // Every frame buffer needs a command buffer
 
-    VkCommandBuffer *command_buffers = new VkCommandBuffer[swapchain_image_count];
+    std::vector<VkCommandBuffer> command_buffers(swapchain_image_count);
 
-    if (vkAllocateCommandBuffers(device, &command_buffer_allocate_info, command_buffers) != VK_SUCCESS)
+    if (vkAllocateCommandBuffers(device, &command_buffer_allocate_info, command_buffers.data()) != VK_SUCCESS)
     {
         std::cerr << "Failed to allocate command buffers." << std::endl;
-        return 1;
+        throw 1;
     }
 
     VkCommandBufferBeginInfo command_buffer_begin_info;
@@ -756,7 +706,7 @@ int main()
         if (vkBeginCommandBuffer(command_buffers[i], &command_buffer_begin_info) != VK_SUCCESS)
         {
             std::cerr << "Failed to begin command buffer recording." << std::endl;
-            return 1;
+            throw 1;
         }
 
         VkRenderPassBeginInfo render_pass_begin_info;
@@ -782,143 +732,168 @@ int main()
         if (vkEndCommandBuffer(command_buffers[i]) != VK_SUCCESS)
         {
             std::cerr << "Failed to stop command buffer recording." << std::endl;
-            return 1;
+            throw 1;
         }
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Create semaphores and fences for proper synchronization.
-    ///
+    return command_buffers;
+}
 
+// Part of `Queue` (because of queue present)
+VkQueue create_queue(VkDevice &device, unsigned int queue_family_index)
+{
+    VkQueue queue;
+    vkGetDeviceQueue(device, queue_family_index, 0, &queue);
+
+    return queue;
+}
+VkSemaphore create_semaphore(VkDevice &device)
+{
     VkSemaphoreCreateInfo semaphore_create_info;
     semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     semaphore_create_info.pNext = nullptr;
     semaphore_create_info.flags = 0;
 
-    VkSemaphore semaphore_image_available;
-    VkSemaphore semaphore_image_rendered;
+    VkSemaphore semaphore;
 
-    if (vkCreateSemaphore(device, &semaphore_create_info, nullptr, &semaphore_image_available) != VK_SUCCESS)
+    if (vkCreateSemaphore(device, &semaphore_create_info, nullptr, &semaphore) != VK_SUCCESS)
     {
         std::cerr << "Failed to create semaphore." << std::endl;
-        return 1;
+        throw 1;
     }
 
-    if (vkCreateSemaphore(device, &semaphore_create_info, nullptr, &semaphore_image_rendered) != VK_SUCCESS)
-    {
-        std::cerr << "Failed to create semaphore." << std::endl;
-        return 1;
-    }
-
+    return semaphore;
+}
+std::vector<VkFence> create_fences(VkDevice &device, unsigned int swapchain_image_count)
+{
     VkFenceCreateInfo fence_create_info;
     fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fence_create_info.pNext = nullptr;
     fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    VkFence *fences = new VkFence[swapchain_image_count];
+    std::vector<VkFence> fences(swapchain_image_count);
 
     for (unsigned int i = 0; i < swapchain_image_count; i++)
     {
         if (vkCreateFence(device, &fence_create_info, nullptr, &fences[i]) != VK_SUCCESS)
         {
             std::cerr << "Failed to create fence." << std::endl;
-            return 1;
+            throw 1;
         }
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Main rendering and event loop.
-    ///
-
-    unsigned long frames_per_second = 0;
-    auto last_frame_begin_time = std::chrono::steady_clock::now();
-
-        while (!glfwWindowShouldClose(window))
-        {
-            glfwPollEvents();
-
-        // Draw frame:
-        //   1.) Get image from swapchain
-        //   2.) Render into this image
-        //   3.) Give it back to the swapchain
-
-        // Get next framebuffer image
-        unsigned int image_index = 0;
-        if (vkAcquireNextImageKHR(device, swapchain, std::numeric_limits<uint64_t>::max(), semaphore_image_available, VK_NULL_HANDLE, &image_index) != VK_SUCCESS)
-        {
-            std::cerr << "Failed to acquire next image.";
-            return 1;
-        }
-
-        // Wait fence
-        if (vkWaitForFences(device, 1, &fences[image_index], VK_TRUE, std::numeric_limits<uint64_t>::max()) != VK_SUCCESS)
-        {
-            std::cerr << "Failed to wait for fence." << std::endl;
-            return 1;
-        }
-
-        // Reset fence
-        if (vkResetFences(device, 1, &fences[image_index]) != VK_SUCCESS)
-        {
-            std::cerr << "Failed to wait for fence." << std::endl;
-            return 1;
-        }
-
-        // When should we wait for the semaphore?
-        VkPipelineStageFlags pipeline_stage_flags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-        // Set which semaphore to wait for and which semaphore to set
-        VkSubmitInfo submit_info;
-        submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submit_info.pNext = nullptr;
-        submit_info.waitSemaphoreCount = 1;
-        submit_info.pWaitSemaphores = &semaphore_image_available;
-        submit_info.pWaitDstStageMask = &pipeline_stage_flags;
-        submit_info.commandBufferCount = 1;
-        submit_info.pCommandBuffers = &command_buffers[image_index];
-        submit_info.signalSemaphoreCount = 1;
-        submit_info.pSignalSemaphores = &semaphore_image_rendered;
-
-        if (vkQueueSubmit(queue, 1, &submit_info, fences[image_index]) != VK_SUCCESS)
-        {
-            std::cerr << "Failed submitting to queue." << std::endl;
-            return 1;
-        }
-
-        VkPresentInfoKHR present_info;
-        present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        present_info.pNext = nullptr;
-        present_info.waitSemaphoreCount = 1;
-        present_info.pWaitSemaphores = &semaphore_image_rendered;
-        present_info.swapchainCount = 1;
-        present_info.pSwapchains = &swapchain;
-        present_info.pImageIndices = &image_index;
-        present_info.pResults = nullptr;
-
-        if (vkQueuePresentKHR(queue, &present_info) != VK_SUCCESS)
-        {
-            std::cerr << "Failed to present queue." << std::endl;
-            return 1;
-        }
-
-        frames_per_second++;
-
-        if (std::chrono::steady_clock::now() - last_frame_begin_time >= std::chrono::seconds(1))
-        {
-            std::stringstream title_stream;
-            title_stream << "learn-vulkan - fps: " << frames_per_second;
-            glfwSetWindowTitle(window, title_stream.str().c_str());
-            frames_per_second = 0;
-            last_frame_begin_time = std::chrono::steady_clock::now();
-        }
+    return fences;
+}
+void render(VkDevice &device, VkSwapchainKHR &swapchain, VkSemaphore &semaphore_image_available, VkSemaphore &semaphore_image_rendered, std::vector<VkFence> &fences, std::vector<VkCommandBuffer> &command_buffers, VkQueue &queue)
+{
+    unsigned int image_index = 0;
+    if (vkAcquireNextImageKHR(device, swapchain, std::numeric_limits<uint64_t>::max(), semaphore_image_available, VK_NULL_HANDLE, &image_index) != VK_SUCCESS)
+    {
+        std::cerr << "Failed to acquire next image.";
+        throw 1;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    ///
-    /// Clean up.
-    ///
+    // Wait fence
+    if (vkWaitForFences(device, 1, &fences[image_index], VK_TRUE, std::numeric_limits<uint64_t>::max()) != VK_SUCCESS)
+    {
+        std::cerr << "Failed to wait for fence." << std::endl;
+        throw 1;
+    }
+
+    // Reset fence
+    if (vkResetFences(device, 1, &fences[image_index]) != VK_SUCCESS)
+    {
+        std::cerr << "Failed to wait for fence." << std::endl;
+        throw 1;
+    }
+
+    // When should we wait for the semaphore?
+    VkPipelineStageFlags pipeline_stage_flags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+    // Set which semaphore to wait for and which semaphore to set
+    VkSubmitInfo submit_info;
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.pNext = nullptr;
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &semaphore_image_available;
+    submit_info.pWaitDstStageMask = &pipeline_stage_flags;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &command_buffers[image_index];
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &semaphore_image_rendered;
+
+    if (vkQueueSubmit(queue, 1, &submit_info, fences[image_index]) != VK_SUCCESS)
+    {
+        std::cerr << "Failed submitting to queue." << std::endl;
+        throw 1;
+    }
+
+    VkPresentInfoKHR present_info;
+    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.pNext = nullptr;
+    present_info.waitSemaphoreCount = 1;
+    present_info.pWaitSemaphores = &semaphore_image_rendered;
+    present_info.swapchainCount = 1;
+    present_info.pSwapchains = &swapchain;
+    present_info.pImageIndices = &image_index;
+    present_info.pResults = nullptr;
+
+    if (vkQueuePresentKHR(queue, &present_info) != VK_SUCCESS)
+    {
+        std::cerr << "Failed to present queue." << std::endl;
+        throw 1;
+    }
+}
+
+int main()
+{
+    const unsigned int width = 1280;
+    const unsigned int height = 720;
+
+    if (!glfwInit())
+    {
+        std::cerr << "Failed to initialize GLFW." << std::endl;
+        return 1;
+    }
+
+    glfwDefaultWindowHints();
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+
+    GLFWwindow *window = glfwCreateWindow(width, height, "learn-vulkan", nullptr, nullptr);
+
+    if (!window)
+    {
+        std::cerr << "Failed to create window." << std::endl;
+        return 1;
+    }
+
+    auto instance = create_instance();
+    auto physical_device = choose_physical_device(instance);
+    auto queue_family_index = select_queue_family_index(physical_device);
+    auto device = create_device(physical_device, queue_family_index);
+    auto surface = create_surface(instance, window);
+    auto swapchain = create_swap_chain(physical_device, device, queue_family_index, surface);
+    auto surface_format = get_surface_format(physical_device, surface);
+    auto image_views = create_image_views(device, swapchain, surface_format);
+    auto swapchain_image_count = image_views.size();
+    auto surface_capabilities = get_surface_capabilities(physical_device, surface);
+    auto semaphore_image_available = create_semaphore(device);
+    auto semaphore_image_rendered = create_semaphore(device);
+    auto fences = create_fences(device, swapchain_image_count);
+    auto render_pass = create_render_pass(device, surface_format);
+    auto framebuffers = create_framebuffers(device, swapchain_image_count, render_pass, image_views, surface_capabilities);
+    auto vertex_shader_module = create_vertex_shader_module(device);
+    auto fragment_shader_module = create_fragment_shader_module(device);
+    auto pipeline = create_pipeline(device, surface_capabilities, vertex_shader_module, fragment_shader_module, render_pass);
+    auto command_buffers = create_command_buffers(queue_family_index, device, swapchain_image_count, framebuffers, render_pass, pipeline, surface_capabilities);
+    auto queue = create_queue(device, queue_family_index);
+
+    while (!glfwWindowShouldClose(window))
+    {
+        glfwPollEvents();
+        render(device, swapchain, semaphore_image_available, semaphore_image_rendered, fences, command_buffers, queue);
+    }
 
     glfwDestroyWindow(window);
     glfwTerminate();
@@ -930,37 +905,31 @@ int main()
         vkDestroyFence(device, fences[i], nullptr);
     }
 
-    delete[] fences;
-
     vkDestroySemaphore(device, semaphore_image_available, nullptr);
     vkDestroySemaphore(device, semaphore_image_rendered, nullptr);
 
     // Not necessary because `vkDestroyCommandPool` does the same.
-    vkFreeCommandBuffers(device, command_pool, swapchain_image_count, command_buffers);
+    //vkFreeCommandBuffers(device, command_pool, swapchain_image_count, command_buffers);
 
-    delete[] command_buffers;
-
-    vkDestroyCommandPool(device, command_pool, nullptr);
+    // TODO: IMPLEMENT IN CLASS
+    // vkDestroyCommandPool(device, command_pool, nullptr);
 
     for (unsigned int i = 0; i < swapchain_image_count; i++)
     {
         vkDestroyFramebuffer(device, framebuffers[i], nullptr);
     }
 
-    delete[] framebuffers;
-
     vkDestroyPipeline(device, pipeline, nullptr);
 
     vkDestroyRenderPass(device, render_pass, nullptr);
 
-    vkDestroyPipelineLayout(device, pipeline_layout, nullptr);
+    // TODO: IMPLEMENT IN CLASS
+    // vkDestroyPipelineLayout(device, pipeline_layout, nullptr);
 
     for (unsigned int i = 0; i < swapchain_image_count; i++)
     {
         vkDestroyImageView(device, image_views[i], nullptr);
     }
-
-    delete[] image_views;
 
     vkDestroySwapchainKHR(device, swapchain, nullptr);
     vkDestroyDevice(device, nullptr);
