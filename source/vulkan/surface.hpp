@@ -15,90 +15,41 @@ public:
 
     inline ~Surface();
 
-    inline const VkSurfaceKHR &get_handle() const;
+    inline const impl::Surface &operator*() const;
 
-    inline const VkSurfaceFormatKHR &get_format() const;
+    inline const impl::SurfaceFormat &get_format() const;
 
-    inline const VkSurfaceCapabilitiesKHR &get_capabilities() const;
+    inline const impl::SurfaceCapabilities &get_capabilities() const;
 
 private:
-    VkSurfaceKHR handle;
+    impl::Surface impl;
 
-    VkSurfaceFormatKHR format;
+    impl::SurfaceFormat format;
 
-    VkSurfaceCapabilitiesKHR capabilities;
+    impl::SurfaceCapabilities capabilities;
 
-    VkInstance instance;
+    impl::Instance instance;
 };
 
 inline Surface::Surface(const Instance &instance, const Physical &physical, GLFWwindow *window)
-: instance(instance.get_handle())
+: instance(*instance)
 {
     ///////////////////////////////////////////////////////////////////////////
     /// Create surface using GLFW.
 
-    if (glfwCreateWindowSurface(instance.get_handle(), window, nullptr, &handle) != VK_SUCCESS)
+    if (glfwCreateWindowSurface(*instance, window, nullptr, &impl) != VK_SUCCESS)
     {
         std::cerr << "Failed to create window surface." << std::endl;
         throw 1;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    /// Fetch format and check if it is supported.
-
-    unsigned int surface_format_count = 0;
-
-    if (vkGetPhysicalDeviceSurfaceFormatsKHR(physical.get_handle(), handle, &surface_format_count, nullptr) != VK_SUCCESS)
-    {
-        std::cerr << "Failed to find surface formats." << std::endl;
-        throw 1;
-    }
-
-    if (surface_format_count == 0)
-    {
-        std::cerr << "No surface formats are found." << std::endl;
-        throw 1;
-    }
-
-    VkSurfaceFormatKHR *formats = new VkSurfaceFormatKHR[surface_format_count];
-
-    if (vkGetPhysicalDeviceSurfaceFormatsKHR(physical.get_handle(), handle, &surface_format_count, formats) != VK_SUCCESS)
-    {
-        std::cerr << "Failed to fetch surface formats." << std::endl;
-        throw 1;
-    }
-
-    for (unsigned int i = 0; i < surface_format_count; i++)
-    {
-        // TODO: Choose surface format properly.
-        if (formats[i].format == VK_FORMAT_R8G8B8A8_UNORM || formats[i].format == VK_FORMAT_B8G8R8A8_UNORM)
-        {
-            format = formats[i];
-            break;
-        }
-    }
-
-    delete[] formats;
-
-    if (format.format == VK_FORMAT_UNDEFINED)
-    {
-        std::cerr << "Surface does not support R8G8B8A8 format." << std::endl;
-        throw 1;
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-    /// Fetch capabilities.
-
-    if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical.get_handle(), handle, &capabilities) != VK_SUCCESS)
-    {
-        std::cerr << "Failed to fetch surface capabilities." << std::endl;
-        throw 1;
-    }
+    format = impl::get_surface_format(impl, *physical);
+    capabilities = impl::get_surface_capabilities(impl, *physical);
 }
 
 inline Surface::~Surface()
 {
-    vkDestroySurfaceKHR(instance, handle, nullptr);
+    impl::destroy_surface(instance, impl);
 }
 
 inline const VkSurfaceCapabilitiesKHR &Surface::get_capabilities() const
@@ -111,9 +62,9 @@ inline const VkSurfaceFormatKHR &Surface::get_format() const
     return format;
 }
 
-inline const VkSurfaceKHR &Surface::get_handle() const
+inline const VkSurfaceKHR &Surface::operator*() const
 {
-    return handle;
+    return impl;
 }
 
 }

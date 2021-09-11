@@ -14,16 +14,16 @@ public:
 
     inline ~Shader();
 
-    inline const VkShaderModule &get_handle() const;
+    inline const impl::ShaderModule &operator*() const;
 
 private:
-    VkShaderModule handle = VK_NULL_HANDLE;
+    impl::ShaderModule impl = VK_NULL_HANDLE;
 
-    VkDevice device;
+    impl::Device device;
 };
 
 inline Shader::Shader(const std::string &binary_path, const Device &device)
-: device(device.get_handle())
+: device(*device)
 {
     std::ifstream file_stream(binary_path, std::ios::binary | std::ios::ate);
 
@@ -42,30 +42,19 @@ inline Shader::Shader(const std::string &binary_path, const Device &device)
     file_stream.read(file_buffer, file_size);
     file_stream.close();
 
-    VkShaderModuleCreateInfo shader_module_create_info;
-    shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    shader_module_create_info.pNext = nullptr;
-    shader_module_create_info.flags = 0;
-    shader_module_create_info.codeSize = file_size;
-    shader_module_create_info.pCode = reinterpret_cast<uint32_t *>(file_buffer);
-
-    if (vkCreateShaderModule(device.get_handle(), &shader_module_create_info, nullptr, &handle) != VK_SUCCESS)
-    {
-        std::cerr << "Failed to create vertex shader module." << std::endl;
-        throw 1;
-    }
+    impl = impl::create_shader_module(*device, file_buffer, file_size);
 
     delete[] file_buffer;
 }
 
 inline Shader::~Shader()
 {
-    vkDestroyShaderModule(device, handle, nullptr);
+    impl::destroy_shader_module(device, impl);
 }
 
-inline const VkShaderModule &Shader::get_handle() const
+inline const VkShaderModule &Shader::operator*() const
 {
-    return handle;
+    return impl;
 }
 
 }

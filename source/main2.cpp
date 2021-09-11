@@ -588,7 +588,7 @@ int main()
     scissor.offset.x = 0;
     scissor.offset.y = 0;
     scissor.extent.width = surface_capabilities.currentExtent.width;
-    scissor.extent.height = surface_capabilities.currentExtent.width;
+    scissor.extent.height = surface_capabilities.currentExtent.height;
 
     VkPipelineViewportStateCreateInfo pipeline_viewport_state_create_info;
     pipeline_viewport_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
