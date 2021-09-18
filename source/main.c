@@ -8,6 +8,29 @@
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 
+#ifdef DEBUG
+
+uint64_t mallocd_count = 0;
+uint64_t freed_count = 0;
+
+void *debug__malloc(const size_t size, const char *const what, const char *const file, const uint64_t line) {
+    mallocd_count++;
+    void *ptr = malloc(size);
+    printf("debug: malloc(%s): allocated %lu bytes at %p in file %s:%lu with a total allocation count of %lu\n", what, size, ptr, file, line, mallocd_count);
+    return ptr;
+}
+
+void debug__free(void *ptr, const char *const what, const char *const file, const uint64_t line) {
+    freed_count++;
+    free(ptr);
+    printf("debug: free(%s): freed memory at %p in file %s:%lu with a total free count of %lu\n", what, ptr, file, line, freed_count);
+}
+
+#define malloc(size) debug__malloc(size, #size, __FILE__, __LINE__)
+#define free(ptr) debug__free(ptr, #ptr, __FILE__, __LINE__)
+
+#endif
+
 int main() {
 
     //
@@ -733,7 +756,7 @@ int main() {
 
     //
     //
-    // Create a 1er.
+    // Create a vertex buffer.
     //
 
     // TODO Not a hard-coded vertex count (size).
