@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <string.h>
 
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
@@ -85,6 +86,9 @@ int main() {
             break;
         }
     }
+
+    VkPhysicalDeviceProperties physical_device_properties;
+    vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
 
     free(physical_devices);
 
@@ -486,6 +490,43 @@ int main() {
     // Create a pipeline.
     //
 
+    // Refernce structure of vertex data array. It is actually created in the
+    // vertex buffer section.
+
+    // const float vertex_data[] = {
+    //     0.0f, -0.5f,       // Position #1 // Vertex #1
+    //     1.0f,  0.0f, 0.0f, // Color #1    //
+
+    //    -0.5f,  0.5f,       // Position #2 // Vertex #2
+    //     0.0f,  1.0f, 0.0f, // Color #2    //
+
+    //     0.5f,  0.5f,       // Position #3 // Vertex #3
+    //     0.0f,  0.0f, 1.0f  // Color #3    //
+    // };
+
+    // TODO Not a hard-coded vertex buffer layout (offset and stride).
+
+    const VkVertexInputBindingDescription vertex_input_bindings_description = {
+        .binding = 0,
+        .stride = 2 * sizeof (float) + 3 * sizeof (float),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+    };
+
+    const VkVertexInputAttributeDescription vertex_input_attribute_description[] = {
+        {
+            .location = 0,
+            .binding = 0,
+            .format = VK_FORMAT_R32G32_SFLOAT,
+            .offset = 0 * sizeof (float),
+        },
+        {
+            .location = 1,
+            .binding = 0,
+            .format = VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = 2 * sizeof (float),
+        },
+    };
+
     VkPipelineLayoutCreateInfo graphics_pipeline_layout_create_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pNext = NULL,
@@ -533,10 +574,10 @@ int main() {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = NULL,
         .flags = 0,
-        .vertexBindingDescriptionCount = 0,
-        .pVertexBindingDescriptions = NULL,
-        .vertexAttributeDescriptionCount = 0,
-        .pVertexAttributeDescriptions = NULL
+        .vertexBindingDescriptionCount = 1,
+        .pVertexBindingDescriptions = &vertex_input_bindings_description,
+        .vertexAttributeDescriptionCount = 2,
+        .pVertexAttributeDescriptions = vertex_input_attribute_description
     };
 
     const VkPipelineInputAssemblyStateCreateInfo graphics_pipeline_input_assembly_state_create_info = {
@@ -581,7 +622,7 @@ int main() {
         .rasterizerDiscardEnable = VK_FALSE,
         .polygonMode = VK_POLYGON_MODE_FILL,
         .cullMode = VK_CULL_MODE_BACK_BIT,
-        .frontFace = VK_FRONT_FACE_CLOCKWISE,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
         .depthBiasEnable = VK_FALSE,
         .depthBiasConstantFactor = 0.0f,
         .depthBiasClamp = 0.0f,
@@ -692,6 +733,87 @@ int main() {
 
     //
     //
+    // Create a 1er.
+    //
+
+    // TODO Not a hard-coded vertex count (size).
+
+    const float vertex_data[] = {
+        0.0f, -0.5f,       // Position #1 // Vertex #1
+        1.0f,  0.0f, 0.0f, // Color #1    //
+
+       -0.5f,  0.5f,       // Position #2 // Vertex #2
+        0.0f,  1.0f, 0.0f, // Color #2    //
+
+        0.5f,  0.5f,       // Position #3 // Vertex #3
+        0.0f,  0.0f, 1.0f  // Color #3    //
+    };
+
+    const VkBufferCreateInfo vertex_buffer_create_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .size = 3 * (2 * sizeof (float) + 3 * sizeof (float)),
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = NULL,
+    };
+
+    VkBuffer vertex_buffer;
+    result = vkCreateBuffer(device, &vertex_buffer_create_info, NULL, &vertex_buffer);
+
+    if (result != VK_SUCCESS) {
+        fprintf(stderr, "error: failed to create vertex buffer\n");
+        exit(1);
+    }
+
+    VkMemoryRequirements vertex_buffer_memory_requirements;
+    vkGetBufferMemoryRequirements(device, vertex_buffer, &vertex_buffer_memory_requirements);
+
+    VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &physical_device_memory_properties);
+
+    uint32_t memory_type_index = 0;
+    uint8_t memory_type_found = 0;
+
+    for (uint32_t memory_properties_type_index = 0U; memory_properties_type_index < physical_device_memory_properties.memoryTypeCount; ++memory_properties_type_index) {
+        if ((vertex_buffer_memory_requirements.memoryTypeBits & (1 << memory_properties_type_index)) && (physical_device_memory_properties.memoryTypes[memory_properties_type_index].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+            memory_type_index = memory_properties_type_index;
+            memory_type_found = 1;
+            break;
+        }
+    }
+
+    if (!memory_type_found) {
+        fprintf(stderr, "error: failed to find required memory type\n");
+        exit(1);
+    }
+
+    const VkMemoryAllocateInfo vertex_buffer_memory_allocate_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = NULL,
+        .allocationSize = vertex_buffer_memory_requirements.size,
+        .memoryTypeIndex = memory_type_index,
+    };
+
+    VkDeviceMemory vertex_buffer_device_memory;
+    result = vkAllocateMemory(device, &vertex_buffer_memory_allocate_info, NULL, &vertex_buffer_device_memory);
+
+    if (result != VK_SUCCESS) {
+        fprintf(stderr, "error: failed to allocate vertex buffer device memory\n");
+        exit(1);
+    }
+
+    vkBindBufferMemory(device, vertex_buffer, vertex_buffer_device_memory, 0);
+
+    void *vertex_buffer_memory_map_address = NULL;
+    vkMapMemory(device, vertex_buffer_device_memory, 0, vertex_buffer_create_info.size, 0, &vertex_buffer_memory_map_address);
+    memcpy(vertex_buffer_memory_map_address, vertex_data, vertex_buffer_create_info.size);
+    vkUnmapMemory(device, vertex_buffer_device_memory);
+
+    //
+    //
     // Create command pool.
     //
 
@@ -778,7 +900,8 @@ int main() {
         vkCmdBeginRenderPass(command_buffers[command_buffer_index], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(command_buffers[command_buffer_index], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
 
-        // TODO Not only 3 vertices for a hard-coded triangle.
+        const VkDeviceSize vertex_buffer_offsets[] = {0};
+        vkCmdBindVertexBuffers(command_buffers[command_buffer_index], 0, 1, &vertex_buffer, vertex_buffer_offsets);
 
         vkCmdDraw(command_buffers[command_buffer_index], 3, 1, 0, 0);
 
@@ -926,6 +1049,10 @@ int main() {
     //
     // Clean up.
     //
+
+    vkDestroyBuffer(device, vertex_buffer, NULL);
+
+    vkFreeMemory(device, vertex_buffer_device_memory, NULL);
 
     for (uint32_t fence_index = 0U; fence_index < swapchain_image_count; ++fence_index) {
         vkDestroyFence(device, fences[fence_index], NULL);
