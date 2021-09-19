@@ -117,6 +117,19 @@ VkPipeline graphics_pipeline_create(
         .primitiveRestartEnable = VK_FALSE
     };
 
+    const VkDynamicState dynamic_states[] = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    const VkPipelineDynamicStateCreateInfo graphics_pipeline_dynamic_state_create_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .dynamicStateCount = 2,
+        .pDynamicStates = dynamic_states,
+    };
+
     const VkViewport graphics_pipeline_viewport = {
         .x = 0,
         .y = 0,
@@ -210,7 +223,7 @@ VkPipeline graphics_pipeline_create(
         .pMultisampleState = &graphics_pipeline_multisample_state_create_info,
         .pDepthStencilState = NULL,
         .pColorBlendState = &graphics_pipeline_color_blend_state_create_info,
-        .pDynamicState = NULL,
+        .pDynamicState = &graphics_pipeline_dynamic_state_create_info,
         .layout = graphics_pipeline_layout,
         .renderPass = render_pass,
         .subpass = 0,

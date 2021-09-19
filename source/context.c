@@ -101,29 +101,29 @@ void context_recreate_swapchain(struct context *context, const uint32_t width, c
     command_buffers_free(context->device, context->command_pool, context->command_buffers, context->swapchain_image_count);
     command_pool_destroy(context->device, context->command_pool);
     framebuffers_destroy(context->device, context->framebuffers, context->swapchain_image_count);
-    pipeline_destroy(context->device, context->graphics_pipeline);
-    pipeline_layout_destroy(context->graphics_pipeline_layout, context->device);
+    // pipeline_destroy(context->device, context->graphics_pipeline);
+    // pipeline_layout_destroy(context->graphics_pipeline_layout, context->device);
     render_pass_destroy(context->render_pass, context->device);
     swapchain_image_views_destroy(context->image_views, context->device, context->swapchain_image_count);
 
-    VkSurfaceCapabilitiesKHR surface_capabilities = surface_get_capabilities(context->surface, context->physical_device);
-    context->surface_format = surface_choose_format(context->surface, context->physical_device);
+    context->surface_capabilities = surface_get_capabilities(context->surface, context->physical_device);
 
     const uint32_t swapchain_min_image_count = swapchain_choose_min_image_count(context->surface_capabilities);
-    context->swapchain = swapchain_create(context->physical_device, context->device, context->surface, context->surface_format, surface_capabilities, old_swapchain, context->queue_family_index, swapchain_min_image_count);
-
-    swapchain_destroy(old_swapchain, context->device);
+    context->swapchain = swapchain_create(context->physical_device, context->device,
+        context->surface, context->surface_format, context->surface_capabilities,
+        old_swapchain, context->queue_family_index, swapchain_min_image_count);
+    context->swapchain_image_count = swapchain_get_image_count(context->swapchain, context->device);
 
     context->image_views = swapchain_create_image_views(context->swapchain, context->device, context->surface_format, context->swapchain_image_count);
 
     context->render_pass = render_pass_create(context->device, context->surface_format);
 
-    const VkShaderModule vertex_shader_module = shader_module_create(context->device, "vert.spv");
-    const VkShaderModule fragment_shader_module = shader_module_create(context->device, "frag.spv");
+    // context->graphics_pipeline_layout = pipeline_layout_create(context->device);
+    // context->graphics_pipeline = graphics_pipeline_create(context->device, context->surface_capabilities, context->render_pass, vertex_shader_module, fragment_shader_module, context->graphics_pipeline_layout);
 
-    context->graphics_pipeline_layout = pipeline_layout_create(context->device);
-    context->graphics_pipeline = graphics_pipeline_create(context->device, surface_capabilities, context->render_pass, vertex_shader_module, fragment_shader_module, context->graphics_pipeline_layout);
+    context->framebuffers = framebuffers_create(context->device, context->surface_capabilities, context->image_views, context->render_pass, context->swapchain_image_count);
 
-    context->framebuffers = framebuffers_create(context->device, surface_capabilities, context->image_views, context->render_pass, context->swapchain_image_count);
     context->command_pool = command_pool_create(context->device, context->queue_family_index);
+
+    swapchain_destroy(old_swapchain, context->device);
 }

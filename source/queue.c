@@ -118,7 +118,10 @@ void queue_draw(
 
     result = vkQueuePresentKHR(queue, &present_info);
 
-    if (result != VK_SUCCESS) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+
+    }
+    else if (result != VK_SUCCESS) {
         fprintf(stderr, "error: failed to present queue\n");
         exit(1);
     }

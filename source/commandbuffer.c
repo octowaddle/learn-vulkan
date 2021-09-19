@@ -104,6 +104,26 @@ VkCommandBuffer *command_buffer_create_draw(
         const VkDeviceSize vertex_buffer_offsets[] = {0};
         vkCmdBindVertexBuffers(draw_command_buffers[draw_command_buffer_index], 0, 1, &vertex_buffer, vertex_buffer_offsets);
 
+        const VkViewport graphics_pipeline_viewport = {
+            .x = 0,
+            .y = 0,
+            .width = surface_capabilities.currentExtent.width,
+            .height = surface_capabilities.currentExtent.height,
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f
+        };
+
+        vkCmdSetViewport(draw_command_buffers[draw_command_buffer_index], 0, 1, &graphics_pipeline_viewport);
+
+        const VkRect2D graphics_pipeline_scissor = {
+            .offset.x = 0,
+            .offset.y = 0,
+            .extent.width = surface_capabilities.currentExtent.width,
+            .extent.height = surface_capabilities.currentExtent.height
+        };
+
+        vkCmdSetScissor(draw_command_buffers[draw_command_buffer_index], 0, 1, &graphics_pipeline_scissor);
+
         vkCmdDraw(draw_command_buffers[draw_command_buffer_index], vertex_count, 1, 0, 0);
 
         vkCmdEndRenderPass(draw_command_buffers[draw_command_buffer_index]);
