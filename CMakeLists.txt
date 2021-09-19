@@ -7,6 +7,7 @@ add_custom_target(fragment-shader COMMAND glslc -fshader-stage=frag -o frag.spv 
 find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
 
-add_executable(learn-vulkan source/main.c)
+add_executable(learn-vulkan source/main.c source/instance.c source/window.c source/device.c source/swapchain.c source/shadermodule.c source/renderpass.c source/pipeline.c source/framebuffer.c source/commandbuffer.c source/buffer.c source/queue.c source/context.c)
+target_include_directories(learn-vulkan PUBLIC include)
 add_dependencies(learn-vulkan vertex-shader fragment-shader)
 target_link_libraries(learn-vulkan PRIVATE Vulkan::Vulkan glfw)
